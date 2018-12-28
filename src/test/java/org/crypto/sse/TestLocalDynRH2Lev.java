@@ -8,12 +8,13 @@ import java.io.*;
 import java.util.ArrayList;
 
 import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
 import com.google.common.collect.TreeMultimap;
 
 public class TestLocalDynRH2Lev {
 
 	public static void main(String[] args) throws Exception {
+		
+		Printer.addPrinter(new Printer(Printer.LEVEL.EXTRA));
 
 		BufferedReader keyRead = new BufferedReader(new InputStreamReader(System.in));
 
@@ -21,7 +22,7 @@ public class TestLocalDynRH2Lev {
 
 		String pass = keyRead.readLine();
 
-		byte[] sk = MMGlobal.keyGenSI(256, pass, "salt/salt", 100);
+		byte[] sk = RR2Lev.keyGen(256, pass, "salt/salt", 100000);
 
 		System.out.println("Enter the relative path name of the folder that contains the files to make searchable");
 
@@ -38,24 +39,23 @@ public class TestLocalDynRH2Lev {
 		int smallBlock = 100;
 		int dataSize = 10000;
 
-		// Construction of the global multi-map
-		System.out.println("\nBeginning of Global MM creation \n");
-
-		RH2Lev.master = sk;
+		// // Construction of the global multi-map
+		System.out.println("\nBeginning of Encrypted Multi-map creation \n");
 
 		DynRH2Lev twolev = DynRH2Lev.constructEMMParGMM(sk, TextExtractPar.lp1, bigBlock, smallBlock, dataSize);
 
-		Multimap<String, String> testUp = ArrayListMultimap.create();
+		// Empty the previous multimap
+
+		TextExtractPar.lp1 = ArrayListMultimap.create();
 
 		// Update phase
 
-		System.out.println("Enter the relative path name of the folder that contains the files to add");
+		System.out.println("Enter the relative path name of the folder that contains the files to add:");
 
 		pathName = keyRead.readLine();
 
 		listOfFile = new ArrayList<File>();
 		TextProc.listf(pathName, listOfFile);
-
 		TextProc.TextProc(false, pathName);
 
 		TreeMultimap<String, byte[]> tokenUp = DynRH2Lev.tokenUpdate(sk, TextExtractPar.lp1);
@@ -74,7 +74,7 @@ public class TestLocalDynRH2Lev {
 				byte[][] token = DynRH2Lev.genTokenFS(sk, keyword);
 
 				System.out.println(DynRH2Lev.resolve(CryptoPrimitives.generateCmac(sk, 3 + new String()), twolev
-						.testSIFS(token, twolev.getDictionary(), twolev.getArray(), twolev.getDictionaryUpdates())));
+						.queryFS(token, twolev.getDictionary(), twolev.getArray(), twolev.getDictionaryUpdates())));
 
 			}
 		} else {
@@ -83,7 +83,7 @@ public class TestLocalDynRH2Lev {
 			byte[][] token = DynRH2Lev.genToken(sk, keyword);
 
 			System.out.println(DynRH2Lev.resolve(CryptoPrimitives.generateCmac(sk, 3 + new String()),
-					twolev.testSI(token, twolev.getDictionary(), twolev.getArray(), twolev.getDictionaryUpdates())));
+					twolev.query(token, twolev.getDictionary(), twolev.getArray(), twolev.getDictionaryUpdates())));
 
 		}
 

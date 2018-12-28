@@ -14,7 +14,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 /*
  * This Class tests the text processing functionality
  * It outputs two multi-maps: the first associates keywords to the documents identifiers while the second associates the doc identifiers to keywords
@@ -30,6 +29,8 @@ import java.util.ArrayList;
 public class TestIndexing {
 
 	public static void main(String[] args) throws Exception {
+		
+		Printer.addPrinter(new Printer(Printer.LEVEL.EXTRA));
 
 		BufferedReader keyRead = new BufferedReader(new InputStreamReader(System.in));
 
@@ -42,8 +43,8 @@ public class TestIndexing {
 
 		TextProc.TextProc(false, pathName);
 
-		System.out.println("First mult-map " + TextExtractPar.lp1);
-		System.out.println("Second multi-map " + TextExtractPar.lp1);
+		System.out.println("\nFirst mult-map " + TextExtractPar.lp1);
+		System.out.println("Second multi-map " + TextExtractPar.lp2);
 
 	}
 

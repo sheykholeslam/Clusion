@@ -1,3 +1,27 @@
+/** * Copyright (C) 2016 Tarik Moataz
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+//***********************************************************************************************//
+
+/////////////////////    Implementation of a dynamic Forward Secure SSE (a variant of the Cash et al. NDSS'14)
+
+/////////////////////				Response Hiding with add operations					///////////
+
+//***********************************************************************************************//	
+
 package org.crypto.sse;
 
 import java.io.IOException;
@@ -7,6 +31,7 @@ import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -35,7 +60,7 @@ public class DynRH2Lev extends RH2Lev {
 
 	// ***********************************************************************************************//
 
-	///////////////////// SetupSI /////////////////////////////
+	///////////////////// Setup /////////////////////////////
 
 	// ***********************************************************************************************//
 
@@ -45,40 +70,38 @@ public class DynRH2Lev extends RH2Lev {
 
 		RH2Lev result = constructEMMPar(key, lookup, bigBlock, smallBlock, dataSize);
 
-		System.out.println("Initialization of the Update Encrypted Dictionary\n");
+		Printer.debugln("Initialization of the Encrypted Dictionary that will handle the updates:\n");
 
 		HashMap<String, byte[]> dictionaryUpdates = new HashMap<String, byte[]>();
 
 		return new DynRH2Lev(result.getDictionary(), result.getArray(), dictionaryUpdates);
-
 	}
+
+	// ***********************************************************************************************//
+
+	///////////////////// Update Token /////////////////////////////
+
+	// ***********************************************************************************************//
 
 	public static TreeMultimap<String, byte[]> tokenUpdate(byte[] key, Multimap<String, String> lookup)
 			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
 			NoSuchProviderException, NoSuchPaddingException, IOException {
 
-		// We use a lexicographic sorted list such that the server
-		// will not know any information of the inserted elements creation order
 		TreeMultimap<String, byte[]> tokenUp = TreeMultimap.create(Ordering.natural(), Ordering.usingToString());
 
-		// Key generation
+		SecureRandom random = new SecureRandom();
+		random.setSeed(CryptoPrimitives.randomSeed(16));
+		byte[] iv = new byte[16];
+
 		for (String word : lookup.keySet()) {
 
-			byte[] key2 = CryptoPrimitives.generateCmac(key, 2 + word);
-			// generate keys for response-hiding construction for SIV (Synthetic
-			// IV)
-			byte[] key3 = CryptoPrimitives.generateCmac(master, 3 + new String());
+			byte[] key3 = CryptoPrimitives.generateCmac(key, 3 + new String());
 
-			byte[] key4 = null;
-			if (lmm == false) {
-				key4 = CryptoPrimitives.generateCmac(master, 4 + word);
-			} else {
-				key4 = CryptoPrimitives.generateCmac(master, eval);
-			}
-
-			byte[] key5 = CryptoPrimitives.generateCmac(key, 5 + word);
+			byte[] key4 = CryptoPrimitives.generateCmac(key, 4 + word);
 
 			for (String id : lookup.get(word)) {
+				random.nextBytes(iv);
+
 				int counter = 0;
 
 				if (state.get(word) != null) {
@@ -87,13 +110,11 @@ public class DynRH2Lev extends RH2Lev {
 
 				state.put(word, counter + 1);
 
-				byte[] l = CryptoPrimitives.generateCmac(key5, "" + counter);
+				byte[] l = CryptoPrimitives.generateCmac(key4, "" + counter);
 
-				String value = new String(CryptoPrimitives.DTE_encryptAES_CTR_String(key3, key4, id, 20), "ISO-8859-1");
+				byte[] value = CryptoPrimitives.encryptAES_CTR_String(key3, iv, id, sizeOfFileIdentifer);
 
-				tokenUp.put(new String(l), CryptoPrimitives.encryptAES_CTR_String(key2,
-						CryptoPrimitives.randomBytes(16), value, sizeOfFileIdentifer));
-
+				tokenUp.put(new String(l), value);
 			}
 
 		}
@@ -117,7 +138,7 @@ public class DynRH2Lev extends RH2Lev {
 
 	// ***********************************************************************************************//
 
-	///////////////////// Token generation
+	///////////////////// Search Token /////////////////////
 	///////////////////// /////////////////////////////
 
 	// ***********************************************************************************************//
@@ -127,7 +148,7 @@ public class DynRH2Lev extends RH2Lev {
 		byte[][] keys = new byte[4][];
 		keys[0] = CryptoPrimitives.generateCmac(key, 1 + word);
 		keys[1] = CryptoPrimitives.generateCmac(key, 2 + word);
-		keys[2] = CryptoPrimitives.generateCmac(key, 5 + word);
+		keys[2] = CryptoPrimitives.generateCmac(key, 4 + word);
 		if (state.get(word) != null) {
 			keys[3] = ByteBuffer.allocate(4).putInt(state.get(word)).array();
 		} else {
@@ -139,21 +160,19 @@ public class DynRH2Lev extends RH2Lev {
 
 	// ***********************************************************************************************//
 
-	///////////////////// TestSI /////////////////////////////
+	///////////////////// Test /////////////////////////////
 
 	// ***********************************************************************************************//
 
-	public static List<String> testSI(byte[][] keys, Multimap<String, byte[]> dictionary, byte[][] array,
+	public static List<String> query(byte[][] keys, Multimap<String, byte[]> dictionary, byte[][] array,
 			HashMap<String, byte[]> dictionaryUpdates) throws InvalidKeyException, InvalidAlgorithmParameterException,
 			NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, IOException {
 
-		List<String> result = testSI(keys, dictionary, array);
+		List<String> result = query(keys, dictionary, array);
 
 		for (int i = 0; i < ByteBuffer.wrap(keys[3]).getInt(); i++) {
 			byte[] temp = dictionaryUpdates.get(new String(CryptoPrimitives.generateCmac(keys[2], "" + i)));
-			String decr = new String(CryptoPrimitives.decryptAES_CTR_String(temp, keys[1])).split("\t\t\t")[0];
-
-			result.add(decr);
+			result.add(new String(temp, "ISO-8859-1"));
 		}
 		return result;
 	}
@@ -164,7 +183,7 @@ public class DynRH2Lev extends RH2Lev {
 
 	// ***********************************************************************************************//
 
-	///////////////////// Forward Secure Token generation
+	///////////////////// Forward Secure Token generation /////////////////////
 	///////////////////// /////////////////////////////
 
 	// ***********************************************************************************************//
@@ -178,7 +197,7 @@ public class DynRH2Lev extends RH2Lev {
 		byte[][] keys = new byte[2 + counter][];
 		keys[0] = CryptoPrimitives.generateCmac(key, 1 + word);
 		keys[1] = CryptoPrimitives.generateCmac(key, 2 + word);
-		byte[] temp = CryptoPrimitives.generateCmac(key, 5 + word);
+		byte[] temp = CryptoPrimitives.generateCmac(key, 4 + word);
 
 		for (int i = 0; i < counter; i++) {
 			keys[2 + i] = CryptoPrimitives.generateCmac(temp, "" + i);
@@ -189,21 +208,19 @@ public class DynRH2Lev extends RH2Lev {
 
 	// ***********************************************************************************************//
 
-	///////////////////// Forward Secure TestSI /////////////////////////////
+	///////////////////// Forward Secure Query /////////////////////////////
 
 	// ***********************************************************************************************//
 
-	public static List<String> testSIFS(byte[][] keys, Multimap<String, byte[]> dictionary, byte[][] array,
+	public static List<String> queryFS(byte[][] keys, Multimap<String, byte[]> dictionary, byte[][] array,
 			HashMap<String, byte[]> dictionaryUpdates) throws InvalidKeyException, InvalidAlgorithmParameterException,
 			NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, IOException {
 
-		List<String> result = testSI(keys, dictionary, array);
+		List<String> result = query(keys, dictionary, array);
 
 		for (int i = 0; i < keys.length - 2; i++) {
 			byte[] temp = dictionaryUpdates.get(new String(keys[2 + i]));
-			String decr = new String(CryptoPrimitives.decryptAES_CTR_String(temp, keys[1])).split("\t\t\t")[0];
-
-			result.add(decr);
+			result.add(new String(temp, "ISO-8859-1"));
 		}
 		return result;
 	}

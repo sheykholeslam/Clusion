@@ -14,6 +14,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+//***********************************************************************************************//
+
+/////////////////////    Implementation of 2Lev scheme of NDSS'14 
+
+/////////////////////				Response Hiding 					///////////
+
+//***********************************************************************************************//	
 
 package org.crypto.sse;
 
@@ -21,15 +28,13 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
 import javax.crypto.NoSuchPaddingException;
-import java.io.File;
 import java.io.IOException;
-import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
-import java.security.spec.InvalidKeySpecException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -38,30 +43,27 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.*;
 
-//***********************************************************************************************//
+public class EMM2Lev {
 
-/////////////////////    Implementation of 2Lev scheme of NDSS'14 paper by David Cash Joseph Jaeger Stanislaw Jarecki  Charanjit Jutla Hugo Krawczyk Marcel-Catalin Rosu and Michael Steiner. Finding 
-//		the right parameters--- of the array size as well as the threshold to differentiate between large and small database,  to meet the same reported benchmarks is empirically set in the code
-//		as it was not reported in the paper. The experimental evaluation of the  scheme is one order of magnitude slower than the numbers reported by Cash as we use Java and not C
-//		Plus, some enhancements on the code itself that can be done.
+	// define the number of characters that a file identifier can have
+	public static int sizeOfFileIdentifer = 100;
+	public static String separator = "seperator";
 
-///		This class can be used independently of the IEX-2Lev or IEX-ZMF if needed /////////////////////////////
-
-//***********************************************************************************************//	
-
-public class MMGlobal implements Serializable {
-
-	// define the number of character that a file identifier can have
-	public static int sizeOfFileIdentifer = 40;
+	public static byte[] master = null;
+	public static boolean lmm = false;
+	public static String eval = "";
 
 	public static int counter = 0;
+
+	// instantiate the Secure Random Object
+	public static SecureRandom random = new SecureRandom();
 
 	public Multimap<String, byte[]> dictionary = ArrayListMultimap.create();
 	public static List<Integer> free = new ArrayList<Integer>();
 	static byte[][] array = null;
 	byte[][] arr = null;
 
-	public MMGlobal(Multimap<String, byte[]> dictionary, byte[][] arr) {
+	public EMM2Lev(Multimap<String, byte[]> dictionary, byte[][] arr) {
 		this.dictionary = dictionary;
 		this.arr = arr;
 	}
@@ -82,47 +84,15 @@ public class MMGlobal implements Serializable {
 		this.arr = array;
 	}
 
-	// ***********************************************************************************************//
-
-	///////////////////// KeyGenSI /////////////////////////////
-
-	// ***********************************************************************************************//
-
-	public static byte[] keyGenSI(int keySize, String password, String filePathString, int icount)
-			throws InvalidKeySpecException, NoSuchAlgorithmException, NoSuchProviderException {
-		File f = new File(filePathString);
-		byte[] salt = null;
-
-		if (f.exists() && !f.isDirectory()) {
-			salt = CryptoPrimitives.readAlternateImpl(filePathString);
-		} else {
-			salt = CryptoPrimitives.randomBytes(8);
-			CryptoPrimitives.write(salt, "saltInvIX", "salt");
-
-		}
-
-		byte[] key = CryptoPrimitives.keyGenSetM(password, salt, icount, keySize);
-		return key;
-
-	}
-
-	// ***********************************************************************************************//
-
-	///////////////////// Setup Parallel/////////////////////////////
-
-	// ***********************************************************************************************//
-
-	public static MMGlobal constructEMMPar(final byte[] key, final Multimap<String, String> lookup, final int bigBlock,
+	public static RH2Lev constructEMMPar(final byte[] key, final Multimap<String, String> lookup, final int bigBlock,
 			final int smallBlock, final int dataSize) throws InterruptedException, ExecutionException, IOException {
 
 		final Multimap<String, byte[]> dictionary = ArrayListMultimap.create();
 
-		// System.out.println("\t Initialization of free set \n");
-
 		for (int i = 0; i < dataSize; i++) {
-			// initialize all buckets with random values
 			free.add(i);
 		}
+		random.setSeed(CryptoPrimitives.randomSeed(16));
 
 		List<String> listOfKeyword = new ArrayList<String>(lookup.keySet());
 		int threads = 0;
@@ -134,9 +104,6 @@ public class MMGlobal implements Serializable {
 
 		ExecutorService service = Executors.newFixedThreadPool(threads);
 		ArrayList<String[]> inputs = new ArrayList<String[]>(threads);
-
-		// System.out.println("\t Partitionning the dictionary for parallel
-		// computation \n");
 
 		final Map<Integer, String> concurrentMap = new ConcurrentHashMap<Integer, String>();
 		for (int i = 0; i < listOfKeyword.size(); i++) {
@@ -150,7 +117,6 @@ public class MMGlobal implements Serializable {
 				public void run() {
 
 					while (concurrentMap.keySet().size() > 0) {
-						// write code
 						Set<Integer> possibleValues = concurrentMap.keySet();
 
 						Random rand = new Random();
@@ -167,10 +133,8 @@ public class MMGlobal implements Serializable {
 						concurrentMap.remove(listOfPossibleKeywords.get(temp));
 
 						try {
-							// bloomFilterList.addAll(secureSetMPar(input,keySM,
-							// keyInvInd, maxLengthOfMask, falsePosRate));
-							Multimap<String, byte[]> output = setupSI(key, input, lookup, bigBlock, smallBlock,
-									dataSize);
+
+							Multimap<String, byte[]> output = setup(key, input, lookup, bigBlock, smallBlock, dataSize);
 							Set<String> keys = output.keySet();
 
 							for (String k : keys) {
@@ -186,28 +150,25 @@ public class MMGlobal implements Serializable {
 			});
 		}
 
-		// Make sure executor stops
 		service.shutdown();
 
 		// Blocks until all tasks have completed execution after a shutdown
 		// request
 		service.awaitTermination(Long.MAX_VALUE, TimeUnit.DAYS);
 
-		return new MMGlobal(dictionary, array);
+		return new RH2Lev(dictionary, array);
 	}
 
-	public static MMGlobal constructEMMParGMM(final byte[] key, final Multimap<String, String> lookup,
-			final int bigBlock, final int smallBlock, final int dataSize)
-			throws InterruptedException, ExecutionException, IOException {
+	public static RH2Lev constructEMMParGMM(final byte[] key, final Multimap<String, String> lookup, final int bigBlock,
+			final int smallBlock, final int dataSize) throws InterruptedException, ExecutionException, IOException {
 
 		final Multimap<String, byte[]> dictionary = ArrayListMultimap.create();
-
-		// System.out.println("\t Initialization of free set \n");
 
 		for (int i = 0; i < dataSize; i++) {
 			// initialize all buckets with random values
 			free.add(i);
 		}
+		random.setSeed(CryptoPrimitives.randomSeed(16));
 
 		List<String> listOfKeyword = new ArrayList<String>(lookup.keySet());
 		int threads = 0;
@@ -219,9 +180,6 @@ public class MMGlobal implements Serializable {
 
 		ExecutorService service = Executors.newFixedThreadPool(threads);
 		ArrayList<String[]> inputs = new ArrayList<String[]>(threads);
-
-		// System.out.println("\t Partitionning the dictionary for parallel
-		// computation \n");
 
 		for (int i = 0; i < threads; i++) {
 			String[] tmp;
@@ -240,14 +198,14 @@ public class MMGlobal implements Serializable {
 			inputs.add(i, tmp);
 		}
 
-		System.out.println("\t End of Partitionning  \n");
+		Printer.debugln("End of Partitionning  \n");
 
 		List<Future<Multimap<String, byte[]>>> futures = new ArrayList<Future<Multimap<String, byte[]>>>();
 		for (final String[] input : inputs) {
 			Callable<Multimap<String, byte[]>> callable = new Callable<Multimap<String, byte[]>>() {
 				public Multimap<String, byte[]> call() throws Exception {
 
-					Multimap<String, byte[]> output = setupSI(key, input, lookup, bigBlock, smallBlock, dataSize);
+					Multimap<String, byte[]> output = setup(key, input, lookup, bigBlock, smallBlock, dataSize);
 					return output;
 				}
 			};
@@ -265,42 +223,74 @@ public class MMGlobal implements Serializable {
 
 		}
 
-		return new MMGlobal(dictionary, array);
+		return new RH2Lev(dictionary, array);
 	}
 
 	// ***********************************************************************************************//
 
-	///////////////////// SetupSI /////////////////////////////
+	///////////////////// Setup /////////////////////////////
 
 	// ***********************************************************************************************//
 
-	public static Multimap<String, byte[]> setupSI(byte[] key, String[] listOfKeyword, Multimap<String, String> lookup,
+	public static Multimap<String, byte[]> setup(byte[] key, String[] listOfKeyword, Multimap<String, String> lookup,
 			int bigBlock, int smallBlock, int dataSize) throws InvalidKeyException, InvalidAlgorithmParameterException,
 			NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, IOException {
 
 		// determine the size f the data set and therefore the size of the array
 		array = new byte[dataSize][];
 		Multimap<String, byte[]> gamma = ArrayListMultimap.create();
-		long startTime = System.nanoTime();
+
+		byte[] iv = new byte[16];
 
 		for (String word : listOfKeyword) {
 
 			counter++;
 			if (((float) counter / 10000) == (int) (counter / 10000)) {
-				System.out.println("Counter " + counter);
+				Printer.statsln("Number of processed keywords " + counter);
 			}
 
 			// generate the tag
+			// Note that to avoid key collision all words "word" need to be
+			// encoded to have the same length
 			byte[] key1 = CryptoPrimitives.generateCmac(key, 1 + word);
 			byte[] key2 = CryptoPrimitives.generateCmac(key, 2 + word);
+
+			// generate keys for response-hiding construction for SIV (Synthetic
+			// IV)
+			byte[] key3 = CryptoPrimitives.generateCmac(master, 3 + new String());
+
+			byte[] key4 = null;
+			if (lmm == false) {
+				key4 = CryptoPrimitives.generateCmac(master, 4 + word);
+			} else {
+				key4 = CryptoPrimitives.generateCmac(master, eval);
+			}
+
+			// Encryption of the lookup DB(w) deterministically to create unique
+			// tags
+
+			List<String> encryptedID = new ArrayList<String>();
+
+			for (String id : lookup.get(word)) {
+				encryptedID
+						.add(new String(CryptoPrimitives.DTE_encryptAES_CTR_String(key3, key4, id, 20), "ISO-8859-1"));
+			}
+
+			String encryptedIdString = "";
+
+			for (String s : encryptedID) {
+				encryptedIdString += s + separator;
+			}
+
 			int t = (int) Math.ceil((float) lookup.get(word).size() / bigBlock);
 
 			if (lookup.get(word).size() <= smallBlock) {
 				// pad DB(w) to "small block"
 				byte[] l = CryptoPrimitives.generateCmac(key1, Integer.toString(0));
-
-				gamma.put(new String(l), CryptoPrimitives.encryptAES_CTR_String(key2, CryptoPrimitives.randomBytes(16),
-						"1 " + lookup.get(word).toString(), smallBlock * sizeOfFileIdentifer));
+				random.nextBytes(iv);
+				byte[] v = CryptoPrimitives.encryptAES_CTR_String(key2, iv, "1" + separator + encryptedIdString,
+						smallBlock * sizeOfFileIdentifer);
+				gamma.put(new String(l), v);
 			}
 
 			else {
@@ -309,19 +299,25 @@ public class MMGlobal implements Serializable {
 
 				for (int j = 0; j < t; j++) {
 
-					List<String> tmpList = new ArrayList<String>(lookup.get(word));
+					List<String> encryptedID1 = new ArrayList<String>(encryptedID);
 
 					if (j != t - 1) {
-						tmpList = tmpList.subList(j * bigBlock, (j + 1) * bigBlock);
+						encryptedID1 = encryptedID1.subList(j * bigBlock, (j + 1) * bigBlock);
 					} else {
-						int sizeList = tmpList.size();
+						int sizeList = encryptedID.size();
 
-						tmpList = tmpList.subList(j * bigBlock, tmpList.size());
+						encryptedID1 = encryptedID1.subList(j * bigBlock, encryptedID1.size());
 
 						for (int s = 0; s < ((j + 1) * bigBlock - sizeList); s++) {
-							tmpList.add("XX");
+							encryptedID1.add(separator);
 						}
 
+					}
+
+					encryptedIdString = "";
+
+					for (String s : encryptedID1) {
+						encryptedIdString += s + separator;
 					}
 
 					// generate the integer which is associated to free[b]
@@ -337,20 +333,27 @@ public class MMGlobal implements Serializable {
 					}
 
 					int tmpPos = free.get(position);
-					array[tmpPos] = CryptoPrimitives.encryptAES_CTR_String(key2, CryptoPrimitives.randomBytes(16),
-							tmpList.toString(), bigBlock * sizeOfFileIdentifer);
-					listArrayIndex.add(tmpPos + "");
-
+					random.nextBytes(iv);
+					array[tmpPos] = CryptoPrimitives.encryptAES_CTR_String(key2, iv, encryptedIdString,
+							bigBlock * sizeOfFileIdentifer);
+					listArrayIndex.add(tmpPos + "***");
 					free.remove(position);
 
+				}
+
+				String listArrayIndexString = "";
+
+				for (String s : listArrayIndex) {
+					listArrayIndexString += s + separator;
 				}
 
 				// medium case
 				if (t <= smallBlock) {
 					byte[] l = CryptoPrimitives.generateCmac(key1, Integer.toString(0));
-					gamma.put(new String(l),
-							CryptoPrimitives.encryptAES_CTR_String(key2, CryptoPrimitives.randomBytes(16),
-									"2 " + listArrayIndex.toString(), smallBlock * sizeOfFileIdentifer));
+					random.nextBytes(iv);
+					byte[] v = CryptoPrimitives.encryptAES_CTR_String(key2, iv, "2" + separator + listArrayIndexString,
+							smallBlock * sizeOfFileIdentifer);
+					gamma.put(new String(l), v);
 				}
 				// big case
 				else {
@@ -369,7 +372,7 @@ public class MMGlobal implements Serializable {
 
 							tmpListTwo = tmpListTwo.subList(l * bigBlock, tmpListTwo.size());
 							for (int s = 0; s < ((l + 1) * bigBlock - sizeList); s++) {
-								tmpListTwo.add("XX");
+								tmpListTwo.add("***");
 							}
 						}
 
@@ -387,58 +390,63 @@ public class MMGlobal implements Serializable {
 
 						int tmpPos = free.get(position);
 
-						array[tmpPos] = CryptoPrimitives.encryptAES_CTR_String(key2, CryptoPrimitives.randomBytes(16),
-								tmpListTwo.toString(), bigBlock * sizeOfFileIdentifer);
+						String tmpListTwoString = "";
 
-						listArrayIndexTwo.add(tmpPos + "");
+						for (String s : tmpListTwo) {
+							tmpListTwoString += s + separator;
+						}
+						random.nextBytes(iv);
+
+						array[tmpPos] = CryptoPrimitives.encryptAES_CTR_String(key2, iv, tmpListTwoString,
+								bigBlock * sizeOfFileIdentifer);
+						listArrayIndexTwo.add(tmpPos + separator);
 
 						free.remove(position);
 
 					}
 
+					String listArrayIndexTwoString = "";
+
+					for (String s : listArrayIndexTwo) {
+						listArrayIndexTwoString += s + separator;
+					}
 					// Pad the second set of identifiers
 
 					byte[] l = CryptoPrimitives.generateCmac(key1, Integer.toString(0));
-					gamma.put(new String(l),
-							CryptoPrimitives.encryptAES_CTR_String(key2, CryptoPrimitives.randomBytes(16),
-									"3 " + listArrayIndexTwo.toString(), smallBlock * sizeOfFileIdentifer));
-
+					random.nextBytes(iv);
+					byte[] v = CryptoPrimitives.encryptAES_CTR_String(key2, iv,
+							"3" + separator + listArrayIndexTwoString, smallBlock * sizeOfFileIdentifer);
+					gamma.put(new String(l), v);
 				}
 
 			}
 
 		}
-		long endTime = System.nanoTime();
-		long totalTime = endTime - startTime;
-		// System.out.println("Time for one (w, id) "+totalTime/lookup.size());
+
 		return gamma;
 	}
 
 	// ***********************************************************************************************//
 
-	///////////////////// Token generation based On NDSS paper
+	///////////////////// Search Token generation /////////////////////
 	///////////////////// /////////////////////////////
 
 	// ***********************************************************************************************//
 
-	// output two keys
+	public static byte[] token(byte[] key, String word) throws UnsupportedEncodingException {
 
-	public static byte[][] genToken(byte[] key, String word) throws UnsupportedEncodingException {
-
-		byte[][] keys = new byte[2][];
-		keys[0] = CryptoPrimitives.generateCmac(key, 1 + word);
-		keys[1] = CryptoPrimitives.generateCmac(key, 2 + word);
-
+		byte[] keys = new byte[16];
+		keys = CryptoPrimitives.generateCmac(key, 1 + word);
 		return keys;
 	}
 
 	// ***********************************************************************************************//
 
-	///////////////////// TestSI /////////////////////////////
+	///////////////////// Query /////////////////////////////
 
 	// ***********************************************************************************************//
 
-	public static List<String> testSI(byte[][] keys, Multimap<String, byte[]> dictionary, byte[][] array)
+	public static List<String> query(byte[][] keys, Multimap<String, byte[]> dictionary, byte[][] array)
 			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
 			NoSuchProviderException, NoSuchPaddingException, IOException {
 
@@ -449,22 +457,19 @@ public class MMGlobal implements Serializable {
 		if (!(tempList.size() == 0)) {
 			String temp = (new String(CryptoPrimitives.decryptAES_CTR_String(tempList.get(0), keys[1])))
 					.split("\t\t\t")[0];
-			temp = temp.replaceAll("\\s", "");
-			temp = temp.replace('[', ',');
-			temp = temp.replace("]", "");
 
-			String[] result = temp.split(",");
+			String[] result = temp.split(separator);
 
 			List<String> resultFinal = new ArrayList<String>(Arrays.asList(result));
 			// We remove the flag that identifies the size of the dataset
 
 			if (result[0].equals("1")) {
-
 				resultFinal.remove(0);
 				return resultFinal;
 			}
 
 			else if (result[0].equals("2")) {
+
 				resultFinal.remove(0);
 
 				List<String> resultFinal2 = new ArrayList<String>();
@@ -485,23 +490,13 @@ public class MMGlobal implements Serializable {
 						}
 					}
 
-					String temp2 = "";
-					if (!(array[Integer.parseInt((String) key.subSequence(0, counter))] == null)) {
-						temp2 = (new String(CryptoPrimitives.decryptAES_CTR_String(
-								array[Integer.parseInt((String) key.subSequence(0, counter))], keys[1])))
-										.split("\t\t\t")[0];
-					}
-					temp2 = temp2.replaceAll("\\s", "");
+					String temp2 = (new String(CryptoPrimitives.decryptAES_CTR_String(
+							array[Integer.parseInt((String) key.subSequence(0, counter))], keys[1])))
+									.split("\t\t\t")[0];
 
-					temp2 = temp2.replaceAll(",XX", "");
-
-					temp2 = temp2.replace("[", "");
-					temp2 = temp2.replace("]", "");
-
-					String[] result3 = temp2.split(",");
+					String[] result3 = temp2.split(separator);
 
 					List<String> tmp = new ArrayList<String>(Arrays.asList(result3));
-
 					resultFinal2.addAll(tmp);
 				}
 
@@ -509,6 +504,7 @@ public class MMGlobal implements Serializable {
 			}
 
 			else if (result[0].equals("3")) {
+
 				resultFinal.remove(0);
 				List<String> resultFinal2 = new ArrayList<String>();
 				for (String key : resultFinal) {
@@ -529,22 +525,19 @@ public class MMGlobal implements Serializable {
 					String temp2 = (new String(CryptoPrimitives.decryptAES_CTR_String(
 							array[Integer.parseInt((String) key.subSequence(0, counter))], keys[1])))
 									.split("\t\t\t")[0];
-					temp2 = temp2.replaceAll("\\s", "");
 
-					temp2 = temp2.replaceAll(",XX", "");
-					temp2 = temp2.replace("[", "");
-					temp2 = temp2.replace("]", "");
-
-					String[] result3 = temp2.split(",");
+					String[] result3 = temp2.split(separator);
 					List<String> tmp = new ArrayList<String>(Arrays.asList(result3));
 					resultFinal2.addAll(tmp);
 				}
+
 				List<String> resultFinal3 = new ArrayList<String>();
 
 				for (String key : resultFinal2) {
 
 					boolean flag = true;
 					int counter = 0;
+
 					while (flag) {
 
 						if (counter < key.length() && Character.isDigit(key.charAt(counter))) {
@@ -556,15 +549,15 @@ public class MMGlobal implements Serializable {
 							flag = false;
 						}
 					}
+					if (counter == 0) {
+						break;
+					}
+
 					String temp2 = (new String(CryptoPrimitives.decryptAES_CTR_String(
 							array[Integer.parseInt((String) key.subSequence(0, counter))], keys[1])))
 									.split("\t\t\t")[0];
-					temp2 = temp2.replaceAll("\\s", "");
-					temp2 = temp2.replaceAll(",XX", "");
 
-					temp2 = temp2.replace("[", "");
-					temp2 = temp2.replace("]", "");
-					String[] result3 = temp2.split(",");
+					String[] result3 = temp2.split(separator);
 
 					List<String> tmp = new ArrayList<String>(Arrays.asList(result3));
 
@@ -576,4 +569,26 @@ public class MMGlobal implements Serializable {
 		}
 		return new ArrayList<String>();
 	}
+
+	// ***********************************************************************************************//
+
+	///////////////////// Resolve Algorithm /////////////////////////////
+
+	// ***********************************************************************************************//
+
+	public static List<String> resolve(byte[] key, List<String> list)
+			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
+			NoSuchProviderException, NoSuchPaddingException, IOException {
+
+		List<String> result = new ArrayList<String>();
+
+		for (String id : list) {
+			byte[] id2 = id.getBytes("ISO-8859-1");
+
+			result.add(new String(CryptoPrimitives.decryptAES_CTR_String(id2, key)).split("\t\t\t")[0]);
+		}
+
+		return result;
+	}
+
 }

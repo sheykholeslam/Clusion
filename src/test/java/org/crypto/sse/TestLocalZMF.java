@@ -14,7 +14,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 /*
  * This class is a test for the ZMF construction. 
  * It tests for conjunctive queries where the client outputs two keywords that he wants to search for and the search will output the number of documents that contain 
@@ -26,9 +25,7 @@
 package org.crypto.sse;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +33,8 @@ import java.util.Map;
 
 public class TestLocalZMF {
 	public static void main(String[] args) throws Exception {
+		
+		Printer.addPrinter(new Printer(Printer.LEVEL.EXTRA));
 
 		int falsePosRate = 20;
 		int maxMaxLength = 20;
@@ -50,7 +49,7 @@ public class TestLocalZMF {
 
 		long startTime = System.nanoTime();
 
-		BufferedWriter writer = new BufferedWriter(new FileWriter("logs.txt", true));
+		//BufferedWriter writer = new BufferedWriter(new FileWriter("logs.txt", true));
 
 		System.out.println("Enter the relative path name of the folder that contains the files to make searchable:");
 

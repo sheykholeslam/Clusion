@@ -14,7 +14,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 //***********************************************************************************************//
 
 // This file contains the step-by-step local benchmarking of the IEX-2Lev. The encrypted data structure remains in the RAM.
@@ -40,13 +39,15 @@ public class TestLocalIEX2Lev {
 
 	public static void main(String[] args) throws Exception {
 
+		Printer.addPrinter(new Printer(Printer.LEVEL.EXTRA));
+
 		BufferedReader keyRead = new BufferedReader(new InputStreamReader(System.in));
 
 		System.out.println("Enter your password :");
 
 		String pass = keyRead.readLine();
 
-		List<byte[]> listSK = IEX2Lev.keyGen(256, pass, "salt/salt", 100);
+		List<byte[]> listSK = IEX2Lev.keyGen(256, pass, "salt/salt", 100000);
 
 		long startTime = System.nanoTime();
 
@@ -71,40 +72,40 @@ public class TestLocalIEX2Lev {
 
 		long startTime2 = System.nanoTime();
 
-		IEX2Lev disj = IEX2Lev.setupDISJ(listSK, TextExtractPar.lp1, TextExtractPar.lp2, bigBlock, smallBlock, 0);
+		IEX2Lev disj = IEX2Lev.setup(listSK, TextExtractPar.lp1, TextExtractPar.lp2, bigBlock, smallBlock, 0);
 
 		long endTime2 = System.nanoTime();
 		long totalTime2 = endTime2 - startTime2;
 
 		// Writing logs
 
-		System.out.println("\n*****************************************************************");
-		System.out.println("\n\t\tSTATS");
-		System.out.println("\n*****************************************************************");
+		Printer.debugln("\n*****************************************************************");
+		Printer.debugln("\n\t\tSTATS");
+		Printer.debugln("\n*****************************************************************");
 
-		// System.out.println("\nNumber of keywords
+		// Printer.debugln("\nNumber of keywords
 		// "+TextExtractPar.totalNumberKeywords);
-		System.out.println("\nNumber of (w, id) pairs " + TextExtractPar.lp2.size());
+		Printer.debugln("\nNumber of (w, id) pairs " + TextExtractPar.lp2.size());
 		writer.write("\n Number of (w, id) pairs " + TextExtractPar.lp2.size());
 
-		System.out.println("\nTotal number of stored (w, Id) including in local MM : " + IEX2Lev.numberPairs);
+		Printer.debugln("\nTotal number of stored (w, Id) including in local MM : " + IEX2Lev.numberPairs);
 		writer.write("\n Total number of stored (w, Id) including in local MM : " + IEX2Lev.numberPairs);
 
-		System.out.println("\nTime elapsed per (w, Id) in ns: " + totalTime2 / IEX2Lev.numberPairs);
+		Printer.debugln("\nTime elapsed per (w, Id) in ns: " + totalTime2 / IEX2Lev.numberPairs);
 		writer.write("\n Time elapsed per (w, Id) in ns: " + totalTime2 / IEX2Lev.numberPairs);
 
-		System.out.println("\nTotal Time elapsed for the entire construction in seconds: " + totalTime2 / 1000000000);
+		Printer.debugln("\nTotal Time elapsed for the entire construction in seconds: " + totalTime2 / 1000000000);
 		writer.write("\n Total Time elapsed for the entire construction in seconds: " + totalTime2 / 1000000000);
 
-		System.out.println("\nRelative Time elapsed per (w, Id) in ns: " + totalTime2 / TextExtractPar.lp1.size());
+		Printer.debugln("\nRelative Time elapsed per (w, Id) in ns: " + totalTime2 / TextExtractPar.lp1.size());
 		writer.write("\n Relative Time elapsed per (w, Id) in ns: " + totalTime2 / TextExtractPar.lp1.size());
 
 		// The two commented commands are used to compute the size of the
 		// encrypted Local multi-maps and global multi-maps
 
-		// System.out.println("\nSize of the Structure LMM: "+
+		// Printer.debugln("\nSize of the Structure LMM: "+
 		// SizeOf.humanReadable(SizeOf.deepSizeOf(disj.getLocalMultiMap())));
-		// System.out.println("\nSize of the Structure MMg: "+
+		// Printer.debugln("\nSize of the Structure MMg: "+
 		// SizeOf.humanReadable(SizeOf.deepSizeOf(disj.getGlobalMM())));
 		writer.close();
 
@@ -144,11 +145,11 @@ public class TestLocalIEX2Lev {
 
 			long startTime3 = System.nanoTime();
 
-			// System.out.println(searchBol);
+			// Printer.debugln(searchBol);
 
-			Set<String> tmpBol = IEX2Lev.testDIS(IEX2Lev.genToken(listSK, searchBol), disj);
+			Set<String> tmpBol = IEX2Lev.query(IEX2Lev.token(listSK, searchBol), disj);
 
-			// System.out.println(tmpBol);
+			// Printer.debugln(tmpBol);
 
 			for (int i = 1; i < bool.length; i++) {
 				Set<String> finalResult = new HashSet<String>();
@@ -159,9 +160,9 @@ public class TestLocalIEX2Lev {
 						searchTMP.add(bool[i][r]);
 					}
 
-					List<TokenDIS> tokenTMP = IEX2Lev.genToken(listSK, searchTMP);
+					List<TokenDIS> tokenTMP = IEX2Lev.token(listSK, searchTMP);
 
-					Set<String> result = new HashSet<String>(MMGlobal.testSI(tokenTMP.get(0).getTokenMMGlobal(),
+					Set<String> result = new HashSet<String>(RR2Lev.query(tokenTMP.get(0).getTokenMMGlobal(),
 							disj.getGlobalMM().getDictionary(), disj.getGlobalMM().getArray()));
 
 					if (!(tmpBol.size() == 0)) {
@@ -174,13 +175,13 @@ public class TestLocalIEX2Lev {
 							for (int j = 0; j < tokenTMP.get(0).getTokenMMLocal().size(); j++) {
 
 								Set<String> temporary = new HashSet<String>();
-								List<String> tempoList = MMGlobal.testSI(tokenTMP.get(0).getTokenMMLocal().get(j),
+								List<String> tempoList = RR2Lev.query(tokenTMP.get(0).getTokenMMLocal().get(j),
 										disj.getLocalMultiMap()[pos].getDictionary(),
 										disj.getLocalMultiMap()[pos].getArray());
 
 								if (!(tempoList == null)) {
 									temporary = new HashSet<String>(
-											MMGlobal.testSI(tokenTMP.get(0).getTokenMMLocal().get(j),
+											RR2Lev.query(tokenTMP.get(0).getTokenMMLocal().get(j),
 													disj.getLocalMultiMap()[pos].getDictionary(),
 													disj.getLocalMultiMap()[pos].getArray()));
 								}
@@ -227,161 +228,4 @@ public class TestLocalIEX2Lev {
 		writer2.close();
 
 	}
-
 }
-
-// public static ArrayList<String> list = new ArrayList<String>() {{
-// add("iex15");
-// add("iex50");
-// add("iex100");
-// add("iex500");
-// add("iex1000");
-// add("iex2000");
-// add("iex10000");
-// }};
-
-// int select = 0;
-//
-//
-// for (File file:listOfFile){
-// PrintWriter pw = null;
-// if (select<listOfFile.size()){
-// try {
-// FileWriter fw = new FileWriter(file, true);
-// pw = new PrintWriter(fw);
-//
-// if (select<15){
-// pw.println(" iex15");
-// }
-//
-// if (select<50){
-//
-// pw.println(" iex50");
-//
-// }
-//
-// if (select<100){
-// pw.println(" iex100");
-//
-// }
-//
-// if (select<500){
-// pw.println(" iex500");
-//
-// }
-//
-// if (select<1000){
-// pw.println(" iex1000");
-//
-// }
-//
-// if (select<2000){
-// pw.println(" iex2000");
-//
-// }
-//
-// if (select<listOfFile.size()){
-// pw.println(" iex10000");
-//
-// }
-//
-// } catch (IOException e) {
-// e.printStackTrace();
-// } finally {
-// if (pw != null) {
-// pw.close();
-// }
-// }
-//
-// select =select+1;
-// }
-// }
-
-// Beginning of test phase
-
-// Conjunctive test for Selectivity 15: w AND x where DB(w) =15
-
-// System.out.println("Conjunctive Test");
-// for (String word : list){
-// String[][] bool = new String[2][1];
-// bool[0][0] = "iex15";
-// bool[1][0] = word;
-// test("logC15-1.txt",word,50,disj,listSK,bool);
-// }
-//
-//
-//// Conjunctive test for Selectivity 15: w AND x where DB(w) = 2000
-//
-//
-// for (String word : list){
-// String[][] bool = new String[2][1];
-// bool[0][0] = "iex2000";
-// bool[1][0] = word;
-// test("logC2000-1.txt",word,50,disj,listSK,bool);
-// }
-//
-//// Conjunctive test for Selectivity 15: w AND x where DB(x) = 15
-//
-// for (String word : list){
-// String[][] bool = new String[2][1];
-// bool[1][0] = "iex15";
-// bool[0][0] = word;
-// test("logC15-2.txt",word,50,disj,listSK,bool);
-// }
-//
-//
-//// Conjunctive test for Selectivity 15: w AND x where DB(x) = 2000
-//
-// for (String word : list){
-// String[][] bool = new String[2][1];
-// bool[1][0] = "iex2000";
-// bool[0][0] = word;
-// test("logC2000-2.txt",word,50,disj,listSK,bool);
-// }
-// System.out.println("Disjunctive Test");
-//
-//
-//// Disjunctive test for Selectivity 15: w OR x where DB(w) = 15
-//
-// for (String word : list){
-// String[][] bool = new String[1][2];
-// bool[0][0] = "iex15";
-// bool[0][1] = word;
-// test("logD15.txt",word,50,disj,listSK,bool);
-// }
-//
-//// Disjunctive test for Selectivity 15: w OR x where DB(w) = 2000
-//
-// for (String word : list){
-// String[][] bool = new String[1][2];
-// bool[0][0] = "iex2000";
-// bool[0][1] = word;
-// test("logD2000.txt",word,50,disj,listSK,bool);
-// }
-//
-// System.out.println("Boolean Test");
-//
-//
-//// Boolean test for selectivity 15: (w OR x) AND (y or z) DB(w Or x) = 15
-//
-// for (String word : list){
-// String[][] bool = new String[2][2];
-// bool[0][0] = "iex15";
-// bool[0][1] = "iex15";
-// bool[1][0] = word;
-// bool[1][1] = word;
-// test("logB15.txt",word,50,disj,listSK,bool);
-// }
-//
-//
-//// Boolean test for selectivity 15: (w OR x) AND (y or z) DB(w Or x) = 15
-//
-//
-// for (String word : list){
-// String[][] bool = new String[2][2];
-// bool[0][0] = "iex2000";
-// bool[0][1] = "iex2000";
-// bool[1][0] = word;
-// bool[1][1] = word;
-// test("logB2000.txt",word,50,disj,listSK,bool);
-// }

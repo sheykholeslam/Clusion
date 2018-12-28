@@ -14,23 +14,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+package src.org.clusion;
 
-//***********************************************************************************************//
 
-// This file contains most cryptographic primitives : AES in CTR mode for file and string encryption, 
-// AES with synthetic IV, HMAC, CMAC-AES and HCB1 online cipher. The file also contains some other
-// tools for bytes manipulation and some variations of hash functions to be user
-//***********************************************************************************************//
-
-package org.crypto.sse;
-
-import org.bouncycastle.crypto.digests.SHA256Digest;
-import org.bouncycastle.crypto.digests.SHA512Digest;
-import org.bouncycastle.crypto.engines.AESFastEngine;
-import org.bouncycastle.crypto.macs.CMac;
-import org.bouncycastle.crypto.macs.HMac;
-import org.bouncycastle.crypto.params.KeyParameter;
-import org.bouncycastle.crypto.prng.ThreadedSeedGenerator;
+import org.spongycastle.crypto.digests.SHA256Digest;
+import org.spongycastle.crypto.digests.SHA512Digest;
+import org.spongycastle.crypto.engines.AESFastEngine;
+import org.spongycastle.crypto.macs.CMac;
+import org.spongycastle.crypto.macs.HMac;
+import org.spongycastle.crypto.params.KeyParameter;
+import org.spongycastle.crypto.prng.ThreadedSeedGenerator;
 
 import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
@@ -42,13 +35,15 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.util.Arrays;
 
-public class CryptoPrimitives {
+@SuppressWarnings("restriction")
+public class CryptoPrimitivesAndroid {
 
-	static {
-		Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
-	}
+    static {
+        Security.addProvider(new org.spongycastle.jce.provider.BouncyCastleProvider());
+    }
 
-	private CryptoPrimitives() {
+
+	private CryptoPrimitivesAndroid() {
 	}
 
 	// ***********************************************************************************************//
@@ -60,7 +55,7 @@ public class CryptoPrimitives {
 	///////////////////// http://docs.oracle.com/javase/7/docs/technotes/guides/security/StandardNames.html#SecretKeyFactory/////////////////////////////
 	// ***********************************************************************************************//
 
-	public static byte[] keyGenSetM(String pass, byte[] salt, int icount, int keySize)
+	public static byte[] keyGen(String pass, byte[] salt, int icount, int keySize)
 			throws InvalidKeySpecException, NoSuchAlgorithmException, NoSuchProviderException {
 
 		// With Java 8, use "PBKDF2WithHmacSHA256/512" instead
@@ -151,27 +146,13 @@ public class CryptoPrimitives {
 	///////////////////// can also be used for random bit generation
 	// ***********************************************************************************************//
 
-	public static byte[] randomBytes(int size) {
-		byte[] randomBytes = new byte[size];
+	public static byte[] randomBytes(int sizeOfSalt) {
+		byte[] salt = new byte[sizeOfSalt];
 		ThreadedSeedGenerator thread = new ThreadedSeedGenerator();
 		SecureRandom random = new SecureRandom();
-		random.setSeed(thread.generateSeed(20, false));
-		random.nextBytes(randomBytes);
-		return randomBytes;
-	}
-
-	// ***********************************************************************************************//
-
-	///////////////////// Salt generation/RandomBytes: it is generated just once
-	///////////////////// and it is not necessary to keep it secret
-	///////////////////// can also be used for random bit generation
-	// ***********************************************************************************************//
-
-	public static byte[] randomSeed(int size) {
-		byte[] seed = new byte[size];
-		ThreadedSeedGenerator thread = new ThreadedSeedGenerator();
-		seed = thread.generateSeed(size, false);
-		return seed;
+		random.setSeed(thread.generateSeed(20, true));
+		random.nextBytes(salt);
+		return salt;
 	}
 
 	// ***********************************************************************************************//
@@ -232,16 +213,16 @@ public class CryptoPrimitives {
 	public static byte[] encryptAES_CTR_String(byte[] keyBytes, byte[] ivBytes, String identifier, int sizeOfFileName)
 			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
 			NoSuchProviderException, NoSuchPaddingException, IOException {
-
+		//Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
 		// Concatenate the title with the text. The title should be at most
 		// "sizeOfFileName" characters including 3 characters marking the end of
 		// it
 		identifier = identifier + "\t\t\t";
 		byte[] input = concat(identifier.getBytes(), new byte[sizeOfFileName - identifier.getBytes().length]);
-
+ 
 		IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
 		SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
-		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding", "BC");
+		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding", "SC");
 		cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
 		ByteArrayInputStream bIn = new ByteArrayInputStream(input);
 		CipherInputStream cIn = new CipherInputStream(bIn, cipher);
@@ -253,83 +234,8 @@ public class CryptoPrimitives {
 		}
 		byte[] cipherText = concat(ivBytes, bOut.toByteArray());
 
-		cIn.close();
-		
 		return cipherText;
 
-	}
-
-	// ***********************************************************************************************//
-
-	///////////////////// AES-CBC encryption with no padding
-	///////////////////// /////////////////////////////
-
-	// ***********************************************************************************************//
-
-
-	public static byte[] encryptAES_CBC_String(byte[] keyBytes, byte[] ivBytes, String identifier)
-			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
-			NoSuchProviderException, NoSuchPaddingException, IOException {
-	    return encryptAES_CBC(keyBytes, ivBytes, identifier.getBytes("UTF-8"));
-	}
-
-	public static byte[] encryptAES_CBC(byte[] keyBytes, byte[] ivBytes, byte[] input)
-			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
-			NoSuchProviderException, NoSuchPaddingException, IOException {
-
-		IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
-		SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
-		Cipher cipher = Cipher.getInstance("AES/CBC/PKCS7Padding", "BC");
-		cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
-		ByteArrayInputStream bIn = new ByteArrayInputStream(input);
-		CipherInputStream cIn = new CipherInputStream(bIn, cipher);
-		ByteArrayOutputStream bOut = new ByteArrayOutputStream();
-
-		int ch;
-		while ((ch = cIn.read()) >= 0) {
-			bOut.write(ch);
-		}
-		byte[] cipherText = concat(ivBytes, bOut.toByteArray());
-		
-		cIn.close();
-
-		return cipherText;
-
-	}
-
-	// ***********************************************************************************************//
-
-	///////////////////// AES-CBC Decryption
-	///////////////////// /////////////////////////////
-
-	// ***********************************************************************************************//
-
-	public static byte[] decryptAES_CBC(byte[] input, byte[] keyBytes)
-			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
-			NoSuchProviderException, NoSuchPaddingException, IOException {
-
-		byte[] ivBytes = new byte[16];
-
-		byte[] cipherText = new byte[input.length - 16];
-
-		System.arraycopy(input, 0, ivBytes, 0, ivBytes.length);
-		System.arraycopy(input, ivBytes.length, cipherText, 0, cipherText.length);
-
-		IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
-		SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
-		Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding", "BC");
-
-
-		// Initalization of the Cipher
-		cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
-
-		ByteArrayOutputStream bOut = new ByteArrayOutputStream();
-		CipherOutputStream cOut = new CipherOutputStream(bOut, cipher);
-
-		cOut.write(cipherText);
-		cOut.close();
-
-		return bOut.toByteArray();
 	}
 
 	// ***********************************************************************************************//
@@ -342,6 +248,7 @@ public class CryptoPrimitives {
 	public static byte[] decryptAES_CTR_String(byte[] input, byte[] keyBytes)
 			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
 			NoSuchProviderException, NoSuchPaddingException, IOException {
+		//Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
 
 		byte[] ivBytes = new byte[16];
 
@@ -352,7 +259,7 @@ public class CryptoPrimitives {
 
 		IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
 		SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
-		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding", "BC");
+		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding","SC");
 
 		// Initalization of the Cipher
 		cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
@@ -376,6 +283,7 @@ public class CryptoPrimitives {
 	public static byte[] DTE_encryptAES_CTR_String(byte[] encKeyBytes, byte[] PRFKeyBytes, String identifier,
 			int sizeOfFileName) throws InvalidKeyException, InvalidAlgorithmParameterException,
 			NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException, IOException {
+		//Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
 
 		// Title Encoding: Concatenate the title with the text. The title should
 		// be at most "sizeOfFileName" characters including 3 characters marking
@@ -385,11 +293,11 @@ public class CryptoPrimitives {
 
 		// Synthetic IV
 
-		byte[] ivBytes = CryptoPrimitives.generateCmac(PRFKeyBytes, identifier);
+		byte[] ivBytes = CryptoPrimitivesAndroid.generateCmac(PRFKeyBytes, identifier);
 
 		IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
 		SecretKeySpec key = new SecretKeySpec(encKeyBytes, "AES");
-		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding", "BC");
+		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding","SC");
 		cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
 		ByteArrayInputStream bIn = new ByteArrayInputStream(input);
 		CipherInputStream cIn = new CipherInputStream(bIn, cipher);
@@ -400,264 +308,12 @@ public class CryptoPrimitives {
 			bOut.write(ch);
 		}
 		byte[] cipherText = concat(ivBytes, bOut.toByteArray());
-		
-		cIn.close();
 
 		return cipherText;
 
 	}
 
-	// ***********************************************************************************************//
-
-	///////////////////// AES-CTR encryption (Designed for sending encrypted
-	///////////////////// files directly to the outsourced
-	///////////////////// servers)/////////////////////////////
-
-	// ***********************************************************************************************//
-
-	public static void encryptAES_CTR_Socket(ObjectOutputStream out, String folderName, String outputFileName,
-			String folderInput, String inputFileName, byte[] keyBytes, byte[] ivBytes)
-			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
-			NoSuchProviderException, NoSuchPaddingException, IOException {
-		byte[] input0 = readAlternateImpl(folderInput + inputFileName);
-
-		// Concatenate the title with the text. The title should be at most 42
-		// characters with 2 characters marking the end of it
-
-		String endOfTitle = "\t";
-
-		inputFileName = inputFileName + endOfTitle;
-		byte[] input1 = concat(inputFileName.getBytes(), new byte[42 - inputFileName.getBytes().length]);
-
-		byte[] input = concat(input1, input0);
-		IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
-		SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
-		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding", "BC");
-		cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
-		ByteArrayInputStream bIn = new ByteArrayInputStream(input);
-		CipherInputStream cIn = new CipherInputStream(bIn, cipher);
-		ByteArrayOutputStream bOut = new ByteArrayOutputStream();
-
-		int ch;
-		while ((ch = cIn.read()) >= 0) {
-			bOut.write(ch);
-		}
-
-		byte[] cipherText = concat(ivBytes, bOut.toByteArray());
-		
-		cIn.close();
-
-		// Send the outputfile name
-		out.writeObject(outputFileName);
-		out.flush();
-
-		// Send the ciphertext
-		out.writeObject(cipherText);
-		out.flush();
-
-	}
-
-	// ***********************************************************************************************//
-
-	///////////////////// AES-CTR encryption /////////////////////////////
-
-	// ***********************************************************************************************//
-
-	public static void encryptAES_CTR(String folderName, String outputFileName, String folderInput,
-			String inputFileName, byte[] keyBytes, byte[] ivBytes)
-			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
-			NoSuchProviderException, NoSuchPaddingException, IOException {
-		byte[] input0 = readAlternateImpl(folderInput + inputFileName);
-
-		// Concatenate the title with the text. The title should be at most 42
-		// characters with 2 characters marking the end of it
-
-		String endOfTitle = "\t";
-
-		inputFileName = inputFileName + endOfTitle;
-		byte[] input1 = concat(inputFileName.getBytes(), new byte[42 - inputFileName.getBytes().length]);
-
-		byte[] input = concat(input1, input0);
-		IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
-		SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
-		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding", "BC");
-		cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
-		ByteArrayInputStream bIn = new ByteArrayInputStream(input);
-		CipherInputStream cIn = new CipherInputStream(bIn, cipher);
-		ByteArrayOutputStream bOut = new ByteArrayOutputStream();
-
-		int ch;
-		while ((ch = cIn.read()) >= 0) {
-			bOut.write(ch);
-		}
-
-		byte[] cipherText = concat(ivBytes, bOut.toByteArray());
-		
-		cIn.close();
-
-		write(cipherText, outputFileName, folderName);
-
-	}
-
-	// ***********************************************************************************************//
-
-	///////////////////// AES-CTR Decryption /////////////////////////////
-
-	// ***********************************************************************************************//
-
-	public static void decryptAES_CTR(String folderOUT, byte[] input, byte[] keyBytes)
-			throws InvalidKeyException, InvalidAlgorithmParameterException, NoSuchAlgorithmException,
-			NoSuchProviderException, NoSuchPaddingException, IOException {
-
-		byte[] ivBytes = new byte[16];
-		byte[] cipherText = new byte[input.length - 16];
-
-		System.arraycopy(input, 0, ivBytes, 0, ivBytes.length);
-		System.arraycopy(input, ivBytes.length, cipherText, 0, cipherText.length);
-
-		IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
-		SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
-		Cipher cipher = Cipher.getInstance("AES/CTR/NoPadding", "BC");
-
-		// Initalization of the Cipher
-		cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
-
-		ByteArrayOutputStream bOut = new ByteArrayOutputStream();
-		CipherOutputStream cOut = new CipherOutputStream(bOut, cipher);
-
-		cOut.write(cipherText);
-		cOut.close();
-
-		// Splitting the title from the plaintext
-
-		byte[] title = new byte[42];
-		byte[] plaintext = new byte[bOut.toByteArray().length - 42];
-		System.arraycopy(bOut.toByteArray(), 0, title, 0, title.length);
-		System.arraycopy(bOut.toByteArray(), title.length, plaintext, 0, plaintext.length);
-
-		String filename = new String(title).split("\t")[0];
-
-		write(plaintext, filename, folderOUT);
-	}
-
-	// ***********************************************************************************************//
-
-	///////////////////// Online Cipher Implementation of HCBC1 of Bellare et
-	///////////////////// al. with AES-CTR block cipher
-	//////////////////// and hash function SHA-256
-	///////////////////// (http://eprint.iacr.org/2007/197)/////////////////////////////
-
-	// ***********************************************************************************************//
-
-	public static boolean[][] onlineCipher(byte[] keyHash, byte[] keyEnc, boolean[] plaintext) throws IOException,
-			InvalidKeyException, NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException {
-
-		// Block extension using Block expansion function
-		int blockSize = 128;
-		boolean[][] blocks = new boolean[plaintext.length][blockSize];
-
-		// le premier block contient le vecteur d�ntialization
-		boolean[][] tmpResults1 = new boolean[plaintext.length + 1][blockSize];
-		tmpResults1[0] = new boolean[blockSize];
-		;
-
-		// temporary results 2
-		boolean[][] tmpResults2 = new boolean[plaintext.length][blockSize];
-
-		// final results
-		boolean[][] results = new boolean[plaintext.length][blockSize];
-
-		for (int i = 0; i < plaintext.length; i++) {
-			// we have one bit and we add 127 bits to it
-			blocks[i][0] = plaintext[i];
-			for (int j = 1; j < blockSize; j++) {
-				blocks[i][j] = false;
-			}
-		}
-
-		SecretKeySpec key = new SecretKeySpec(keyEnc, "AES");
-
-		Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding", "BC");
-
-		cipher.init(Cipher.ENCRYPT_MODE, key);
-		for (int i = 0; i < plaintext.length; i++) {
-			byte[] hmac = CryptoPrimitives.generateHmac(keyHash, CryptoPrimitives.booleanToString(tmpResults1[i]));
-
-			for (int j = 0; j < blockSize; j++) {
-				tmpResults2[i][j] = (CryptoPrimitives.getBit(hmac, j) != 0) ^ blocks[i][j];
-			}
-
-			ByteArrayInputStream bIn = new ByteArrayInputStream(CryptoPrimitives.booleanToBytes(tmpResults2[i]));
-
-			CipherInputStream cIn = new CipherInputStream(bIn, cipher);
-
-			ByteArrayOutputStream bOut = new ByteArrayOutputStream();
-			int ch;
-			while ((ch = cIn.read()) >= 0) {
-				bOut.write(ch);
-			}
-			results[i] = CryptoPrimitives.bytesToBoolean(bOut.toByteArray());
-			tmpResults1[i + 1] = results[i];
-			
-			cIn.close();
-
-		}
-
-		return results;
-
-	}
-
-	// ***********************************************************************************************//
-
-	///////////////////// Enhanced implementation: Online Cipher Implementation
-	///////////////////// of HCBC1 of Bellare et al. with AES-CTR block cipher
-	//////////////////// and hash function SHA-256
-	///////////////////// (http://eprint.iacr.org/2007/197)/////////////////////////////
-
-	// ***********************************************************************************************//
-
-	public static byte[][] onlineCipherOWF(byte[] keyHash, byte[] keyHash2, boolean[] plaintext) throws IOException,
-			InvalidKeyException, NoSuchAlgorithmException, NoSuchProviderException, NoSuchPaddingException {
-
-		// Block extension using Block expansion function (in bytes)
-		int blockSize = 32;
-		byte[][] blocks = new byte[plaintext.length][blockSize];
-
-		// le premier block contient le vecteur d�ntialization
-		byte[][] tmpResults1 = new byte[plaintext.length + 1][blockSize];
-		tmpResults1[0] = new byte[blockSize];
-		;
-
-		// temporary results 2
-		byte[][] tmpResults2 = new byte[plaintext.length][blockSize];
-
-		// final results
-		byte[][] results = new byte[plaintext.length][blockSize];
-
-		for (int i = 0; i < plaintext.length; i++) {
-			// we have one byte and we pad to 32 bytes
-			blocks[i][0] = (byte) (plaintext[i] ? 1 : 0);
-			for (int j = 1; j < blockSize; j++) {
-				blocks[i][j] = 0;
-			}
-		}
-
-		for (int i = 0; i < plaintext.length; i++) {
-
-			byte[] hmac = CryptoPrimitives.generateHmac(keyHash, tmpResults1[i]);
-
-			int j = 0;
-			for (byte b : hmac)
-				tmpResults2[i][j] = (byte) (b ^ blocks[i][j++]);
-
-			results[i] = CryptoPrimitives.generateHmac(keyHash2, tmpResults2[i]);
-			tmpResults1[i + 1] = results[i];
-
-		}
-
-		return results;
-
-	}
+	
 
 	// ***********************************************************************************************//
 
@@ -680,9 +336,9 @@ public class CryptoPrimitives {
 				output.close();
 			}
 		} catch (FileNotFoundException ex) {
-			Printer.normalln("File not found.");
+			System.out.println("File not found.");
 		} catch (IOException ex) {
-			Printer.debugln(""+ex);
+			System.out.println(ex);
 		}
 	}
 
@@ -694,7 +350,7 @@ public class CryptoPrimitives {
 			InputStream input = new BufferedInputStream(new FileInputStream(file));
 			result = readAndClose(input);
 		} catch (FileNotFoundException ex) {
-			Printer.debugln(""+ex);
+			System.out.println(ex);
 		}
 		return result;
 	}
@@ -718,7 +374,7 @@ public class CryptoPrimitives {
 				aInput.close();
 			}
 		} catch (IOException ex) {
-			Printer.debugln(""+ex);
+			System.out.println(ex);
 		}
 		return result.toByteArray();
 	}

@@ -14,7 +14,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 package org.crypto.sse;
 
 //***********************************************************************************************//
@@ -38,6 +37,8 @@ import javax.crypto.NoSuchPaddingException;
 public class TestLocalIEXRH2Lev {
 
 	public static void main(String[] args) throws Exception {
+		
+		Printer.addPrinter(new Printer(Printer.LEVEL.EXTRA));
 
 		BufferedReader keyRead = new BufferedReader(new InputStreamReader(System.in));
 
@@ -45,7 +46,7 @@ public class TestLocalIEXRH2Lev {
 
 		String pass = keyRead.readLine();
 
-		List<byte[]> listSK = IEX2Lev.keyGen(256, pass, "salt/salt", 100);
+		List<byte[]> listSK = IEX2Lev.keyGen(256, pass, "salt/salt", 100000);
 
 		long startTime = System.nanoTime();
 
@@ -54,11 +55,6 @@ public class TestLocalIEXRH2Lev {
 		System.out.println("Enter the relative path name of the folder that contains the files to make searchable");
 
 		String pathName = keyRead.readLine();
-
-		// Creation of different files based on selectivity
-		// Selectivity was computed in an inclusive way. All files that include
-		// x(i+1) include necessarily xi
-		// This is used for benchmarking and can be taken out of the code
 
 		ArrayList<File> listOfFile = new ArrayList<File>();
 		TextProc.listf(pathName, listOfFile);
@@ -70,9 +66,9 @@ public class TestLocalIEXRH2Lev {
 
 		long startTime2 = System.nanoTime();
 
-		RH2Lev.master = listSK.get(0);
+		EMM2Lev.master = listSK.get(0);
 
-		IEXRH2Lev disj = IEXRH2Lev.setupDISJ(listSK, TextExtractPar.lp1, TextExtractPar.lp2, bigBlock, smallBlock, 0);
+		IEXRH2Lev disj = IEXRH2Lev.setup(listSK, TextExtractPar.lp1, TextExtractPar.lp2, bigBlock, smallBlock, 0);
 
 		long endTime2 = System.nanoTime();
 		long totalTime2 = endTime2 - startTime2;
@@ -145,7 +141,7 @@ public class TestLocalIEXRH2Lev {
 
 			long startTime3 = System.nanoTime();
 
-			Set<String> tmpBol = IEXRH2Lev.testDIS(IEXRH2Lev.genToken(listSK, searchBol), disj);
+			Set<String> tmpBol = IEXRH2Lev.query(IEXRH2Lev.token(listSK, searchBol), disj);
 
 			for (int i = 1; i < bool.length; i++) {
 				Set<String> finalResult = new HashSet<String>();
@@ -156,9 +152,9 @@ public class TestLocalIEXRH2Lev {
 						searchTMP.add(bool[i][r]);
 					}
 
-					List<TokenDIS> tokenTMP = IEXRH2Lev.genToken(listSK, searchTMP);
+					List<TokenDIS> tokenTMP = IEXRH2Lev.token(listSK, searchTMP);
 
-					Set<String> result = new HashSet<String>(RH2Lev.testSI(tokenTMP.get(0).getTokenMMGlobal(),
+					Set<String> result = new HashSet<String>(RH2Lev.query(tokenTMP.get(0).getTokenMMGlobal(),
 							disj.getGlobalMM().getDictionary(), disj.getGlobalMM().getArray()));
 
 					if (!(tmpBol.size() == 0)) {
@@ -170,13 +166,13 @@ public class TestLocalIEXRH2Lev {
 							for (int j = 0; j < tokenTMP.get(0).getTokenMMLocal().size(); j++) {
 
 								Set<String> temporary = new HashSet<String>();
-								List<String> tempoList = RH2Lev.testSI(tokenTMP.get(0).getTokenMMLocal().get(j),
+								List<String> tempoList = RH2Lev.query(tokenTMP.get(0).getTokenMMLocal().get(j),
 										disj.getLocalMultiMap()[pos].getDictionary(),
 										disj.getLocalMultiMap()[pos].getArray());
 
 								if (!(tempoList == null)) {
 									temporary = new HashSet<String>(
-											RH2Lev.testSI(tokenTMP.get(0).getTokenMMLocal().get(j),
+											RH2Lev.query(tokenTMP.get(0).getTokenMMLocal().get(j),
 													disj.getLocalMultiMap()[pos].getDictionary(),
 													disj.getLocalMultiMap()[pos].getArray()));
 								}

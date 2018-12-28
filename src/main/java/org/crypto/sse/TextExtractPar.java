@@ -14,7 +14,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 //***********************************************************************************************//
 
 /////////////////////    This file contains the generation of the database DB, i.e., building a plaintext look-up table that associates every keyword to the set fo documents identifiers	/////////////////////////////
@@ -59,7 +58,6 @@ import org.apache.xmlbeans.XmlException;
 
 import java.io.*;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -71,17 +69,17 @@ public class TextExtractPar implements Serializable {
 	public static int maxTupleSize = 0;
 	public static int threshold = 100;
 
-	// lookup stores a plaintext inverted index of the dataset, i.e., the
+	// lookup1 stores a plaintext inverted index of the dataset, i.e., the
 	// association between the keyword and documents that contain the keyword
 
 	Multimap<String, String> lookup1 = ArrayListMultimap.create();
-	static Multimap<String, String> lp1 = ArrayListMultimap.create();
+	public static Multimap<String, String> lp1 = ArrayListMultimap.create();
 
 	// lookup2 stores the document identifier (title) and the keywords contained
 	// in this document
 
 	Multimap<String, String> lookup2 = ArrayListMultimap.create();
-	static Multimap<String, String> lp2 = ArrayListMultimap.create();
+	public static Multimap<String, String> lp2 = ArrayListMultimap.create();
 
 	static int counter = 0;
 
@@ -111,7 +109,7 @@ public class TextExtractPar implements Serializable {
 		ExecutorService service = Executors.newFixedThreadPool(threads);
 		ArrayList<File[]> inputs = new ArrayList<File[]>(threads);
 
-		System.out.println("Number of Threads " + threads);
+		Printer.extraln("Number of Threads " + threads);
 
 		for (int i = 0; i < threads; i++) {
 			File[] tmp;
@@ -150,6 +148,9 @@ public class TextExtractPar implements Serializable {
 
 			for (String key : keywordSet1) {
 				lp1.putAll(key, future.get().getL1().get(key));
+				if (lp1.get(key).size()>maxTupleSize){
+					maxTupleSize= lp1.get(key).size();
+				}
 			}
 			for (String key : keywordSet2) {
 				lp2.putAll(key, future.get().getL2().get(key));
@@ -168,7 +169,7 @@ public class TextExtractPar implements Serializable {
 			for (int j = 0; j < 100; j++) {
 
 				if (counter == (int) ((j + 1) * listOfFile.length / 100)) {
-					System.out.println("Number of files read equals " + j + " %");
+					Printer.extraln("Number of files read equals " + j + " %");
 					break;
 				}
 			}
@@ -186,14 +187,14 @@ public class TextExtractPar implements Serializable {
 			if (file.getName().endsWith(".docx")) {
 				XWPFDocument doc;
 				try {
-					// System.out.println("File read: "+file.getName());
 
 					doc = new XWPFDocument(fis);
 					XWPFWordExtractor ex = new XWPFWordExtractor(doc);
 					lines.add(ex.getText());
+					ex.close();
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				}
 
 			}
@@ -208,19 +209,18 @@ public class TextExtractPar implements Serializable {
 
 				OPCPackage ppt;
 				try {
-					// System.out.println("File read: "+file.getName());
 
 					ppt = OPCPackage.open(fis);
 					XSLFPowerPointExtractor xw = new XSLFPowerPointExtractor(ppt);
 					lines.add(xw.getText());
+					xw.close();
 				} catch (XmlException e) {
 					// TODO Auto-generated catch block
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					System.out.println("File not read: " + file.getName());
+					// TODO Auto-generated catch blPrinter.extraout.println("File not read: " + file.getName());
 				} catch (OpenXML4JException e) {
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				}
 
 			}
@@ -235,22 +235,22 @@ public class TextExtractPar implements Serializable {
 
 				OPCPackage xls;
 				try {
-					// System.out.println("File read: "+file.getName());
 
 					xls = OPCPackage.open(fis);
 					XSSFExcelExtractor xe = new XSSFExcelExtractor(xls);
 					lines.add(xe.getText());
+					xe.close();
 				} catch (InvalidFormatException e) {
 					// TODO Auto-generated catch block
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				} catch (IOException e) {
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 
 				} catch (XmlException e) {
 					// TODO Auto-generated catch block
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				} catch (OpenXML4JException e) {
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				}
 
 			}
@@ -265,16 +265,17 @@ public class TextExtractPar implements Serializable {
 
 				NPOIFSFileSystem fs;
 				try {
-					// System.out.println("File read: "+file.getName());
 
 					fs = new NPOIFSFileSystem(file);
 					WordExtractor extractor = new WordExtractor(fs.getRoot());
 					for (String rawText : extractor.getParagraphText()) {
 						lines.add(extractor.stripFields(rawText));
 					}
+					
+					extractor.close();
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				}
 
 			}
@@ -289,7 +290,6 @@ public class TextExtractPar implements Serializable {
 
 				PDFParser parser;
 				try {
-					// System.out.println("File read: "+file.getName());
 
 					parser = new PDFParser(fis);
 					parser.parse();
@@ -299,7 +299,7 @@ public class TextExtractPar implements Serializable {
 
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				}
 
 			}
@@ -328,12 +328,11 @@ public class TextExtractPar implements Serializable {
 
 			else {
 				try {
-					// System.out.println("File read: "+file.getName());
 
 					lines = Files.readLines(file, Charsets.UTF_8);
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
-					System.out.println("File not read: " + file.getName());
+					Printer.debugln("File not read: " + file.getName());
 				} finally {
 					try {
 						fis.close();
@@ -364,8 +363,21 @@ public class TextExtractPar implements Serializable {
 				// words such as "the, a, etc"
 
 				Analyzer analyzer = new StandardAnalyzer(noise);
-				List<String> token = Tokenizer.tokenizeString(analyzer, lines.get(i));
+				List<String> token0 = Tokenizer.tokenizeString(analyzer, lines.get(i));
+				List<String> token = new ArrayList<String>();
+				//removing numbers/1-letter keywords
+				for (int j=0; j<token0.size();j++){
+					if ((!token0.get(j).matches(".*\\d+.*")
+							&&
+							(token0.get(j)).length() >1)){
+						token.add(token0.get(j));
+					}
+				}
+				
 				temporaryCounter = temporaryCounter + token.size();
+				
+				
+
 				for (int j = 0; j < token.size(); j++) {
 
 					// Avoid counting occurrences of words in the same file
@@ -384,7 +396,7 @@ public class TextExtractPar implements Serializable {
 
 		}
 
-		// System.out.println(lookup.toString());
+		// Printer.debugln(lookup.toString());
 		return new TextExtractPar(lookup1, lookup2);
 
 	}
